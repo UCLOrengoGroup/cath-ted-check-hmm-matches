@@ -9,4 +9,14 @@ Currently the processing is done in a Jupyter notebook which:
 * creates bins according to overlap and evalue
 * randomly selects 10 entries per bin  
 
-Ideally this would also include an easy way of visualising the domain boundaries and recording whether the domain boundaries are good/bad.
+### Visualizing the domain boundaries
+
+   ```
+   python -m venv myenv
+   source myenv/bin/activate
+   pip install -r requirements.txt
+   ```
+For domain visualization, please refer to the Jupyter notebook: `domain_visualization.ipynb` 
+
+Use `vis_domain(df, index)` to visualize the domain boundaries in the human subset dataframe (df) from a specified row (index) in the Jupyter notebook using a PyMOL viewer.
+
