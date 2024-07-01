@@ -8,6 +8,7 @@ import numpy as np
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 import plotly.graph_objects as go
+from ipywidgets import Text, Button
 
 def load_alphafold_structure(chain_id):
     url = f"https://alphafold.ebi.ac.uk/files/{chain_id}.pdb"
@@ -81,8 +82,9 @@ def save_visualization(viewer, output_file):
 def vis_domain(df, index):
     row = df.iloc[index]
     chain_id = row['chain_id']
-    print(f"Visualizing protein with chain ID: {chain_id}")
-
+    hmm_evalue = row['hmm_evalue']
+    overlap_percentage = row['overlap_percentage']
+    
     structure = load_alphafold_structure(chain_id)
     
     domain_boundaries = {
@@ -90,17 +92,11 @@ def vis_domain(df, index):
         'foldseek_boundaries': parse_boundaries(row['foldseek_boundaries'])
     }
     
-    hmm_evalue = row['hmm_evalue']
-    print(f"HMM E-value: {hmm_evalue}")
-    overlap_percentage = row['overlap_percentage']
-    print(f"Overlap Percentage: {overlap_percentage}")
-
     colors = assign_colors(structure, domain_boundaries)
     
     viewer = visualize_structure(structure, colors)
     
-    viewer.show()
-
+    return viewer, chain_id, hmm_evalue, overlap_percentage
 
 def visualize_domains_and_plot(df):
     output = widgets.Output()
@@ -115,6 +111,10 @@ def visualize_domains_and_plot(df):
     # Buttons
     prev_button = widgets.Button(description='Previous')
     next_button = widgets.Button(description='Next')
+    
+    # Search box and button
+    search_box = Text(placeholder='Enter Uniprot ID or chain_id', description='Search:', continuous_update=False)
+    search_button = Button(description='Go')
     
     # Create initial scatter plot
     fig = go.FigureWidget()
@@ -144,15 +144,19 @@ def visualize_domains_and_plot(df):
             xanchor="left",
             x=0.01
         ),
-        width=600,  # Increase the width of the plot
-        height=600  # Adjust the height if needed
+        width=600,
+        height=600
     )
     
     def update_visualization(index):
         with output:
             clear_output(wait=True)
-            vis_domain(df, index)
+            viewer, chain_id, hmm_evalue, overlap_percentage = vis_domain(df, index)
+            print(f"Visualizing protein with chain ID: {chain_id}")
+            print(f"HMM E-value: {hmm_evalue}")
+            print(f"Overlap Percentage: {overlap_percentage}")
             print(f"Showing protein {index + 1} of {len(df)}")
+            viewer.show()
         
         # Update scatter plot
         selected_point = df.iloc[index]
@@ -182,14 +186,30 @@ def visualize_domains_and_plot(df):
         slider.value = 0
         update_visualization(0)
     
+    def on_search_click(b):
+        search_term = search_box.value.strip()
+        if search_term:
+            # Convert Uniprot ID to chain_id format if necessary
+            if not search_term.startswith('AF-'):
+                search_term = f'AF-{search_term}-F1-model_v4'
+            
+            matches = df[df['chain_id'].str.contains(search_term, case=False, regex=False)]
+            if not matches.empty:
+                index = df.index.get_loc(matches.index[0])
+                slider.value = index
+            else:
+                print(f"No matches found for '{search_term}'")
+    
     slider.observe(on_value_change, names='value')
     prev_button.on_click(on_prev_click)
     next_button.on_click(on_next_click)
     sort_dropdown.observe(on_sort_change, names='value')
+    search_button.on_click(on_search_click)
     
     # Layout
     controls = widgets.HBox([prev_button, slider, next_button])
-    top_controls = widgets.VBox([sort_dropdown, controls])
+    search_controls = widgets.HBox([search_box, search_button])
+    top_controls = widgets.VBox([sort_dropdown, controls, search_controls])
     
     # Create a horizontal layout for PyMOL widget and Plotly plot
     layout = widgets.HBox([output, fig])
