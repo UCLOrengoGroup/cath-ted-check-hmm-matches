@@ -6,9 +6,10 @@ import io
 import py3Dmol
 import numpy as np
 import ipywidgets as widgets
-from IPython.display import display, clear_output
+from IPython.display import display, clear_output, HTML
 import plotly.graph_objects as go
 from ipywidgets import Text, Button
+import plotly.express as px
 
 def load_alphafold_structure(chain_id):
     url = f"https://alphafold.ebi.ac.uk/files/{chain_id}.pdb"
@@ -66,11 +67,15 @@ def visualize_structure(structure, colors):
     viewer.setStyle({'cartoon': {'colorscheme': {'prop': 'resi', 'map': colors}}})
     viewer.zoomTo()
     
-    print("Legend:")
-    print("HMM only: Blue")
-    print("TED only: Red")
-    print("HMM and TED overlap: Purple")
-    print("No domain: Grey")
+    legend_html = """
+    <div style="font-family: Arial, sans-serif; font-size: 14px; margin-bottom: 10px;">
+        <strong>Legend:</strong>
+        <span style="color: #22a7f0; margin-right: 10px;">■ HMM only: Blue</span>
+        <span style="color: #e14b31; margin-right: 10px;">■ TED only: Red</span>
+        <span style="color: #776bcd; margin-right: 10px;">■ HMM and TED overlap: Purple</span>
+        <span style="color: #A9A9A9;">■ No domain: Grey</span>
+    """
+    display(HTML(legend_html))
     
     return viewer
 
@@ -84,6 +89,8 @@ def vis_domain(df, index):
     chain_id = row['chain_id']
     hmm_evalue = row['hmm_evalue']
     overlap_percentage = row['overlap_percentage']
+    plddt = row['plddt']
+    packing_density = row['packing_density']
     
     structure = load_alphafold_structure(chain_id)
     
@@ -96,7 +103,7 @@ def vis_domain(df, index):
     
     viewer = visualize_structure(structure, colors)
     
-    return viewer, chain_id, hmm_evalue, overlap_percentage
+    return viewer, chain_id, hmm_evalue, overlap_percentage, plddt, packing_density
 
 def visualize_domains_and_plot(df):
     output = widgets.Output()
@@ -116,13 +123,43 @@ def visualize_domains_and_plot(df):
     search_box = Text(placeholder='Enter Uniprot ID or chain_id', description='Search:', continuous_update=False)
     search_button = Button(description='Go')
     
+    # Add toggle button for coloring
+    color_toggle = widgets.ToggleButtons(
+        options=['pLDDT', 'Packing Density'],
+        description='Color by:',
+        disabled=False,
+        button_style='',
+    )
+
     # Create initial scatter plot
     fig = go.FigureWidget()
+
+    def update_scatter_plot(color_by):
+        with fig.batch_update():
+            if color_by == 'pLDDT':
+                colorscale = px.colors.sequential.Viridis
+                color_values = df['plddt']
+                colorbar_title = 'pLDDT'
+            else:
+                colorscale = px.colors.sequential.Plasma
+                color_values = df['packing_density']
+                colorbar_title = 'Packing Density'
+
+            fig.data[0].marker.color = color_values
+            fig.data[0].marker.colorscale = colorscale
+            fig.data[0].marker.colorbar.title = colorbar_title
+
     fig.add_trace(go.Scatter(
         x=df['hmm_evalue'],
         y=df['overlap_percentage'],
         mode='markers',
-        marker=dict(color='blue', size=8),
+        marker=dict(
+            size=8,
+            colorscale=px.colors.sequential.Viridis,
+            color=df['plddt'],
+            colorbar=dict(title='pLDDT'),
+            showscale=True
+        ),
         text=df['chain_id'],
         name='All Proteins'
     ))
@@ -130,7 +167,7 @@ def visualize_domains_and_plot(df):
         x=[],
         y=[],
         mode='markers',
-        marker=dict(color='red', size=12, symbol='star'),
+        marker=dict(color='black', size=12, symbol='star'),
         name='Selected Protein'
     ))
     fig.update_layout(
@@ -147,14 +184,21 @@ def visualize_domains_and_plot(df):
         width=600,
         height=600
     )
-    
+
+    def on_color_toggle(change):
+        update_scatter_plot(change['new'])
+
+    color_toggle.observe(on_color_toggle, names='value')
+
     def update_visualization(index):
         with output:
             clear_output(wait=True)
-            viewer, chain_id, hmm_evalue, overlap_percentage = vis_domain(df, index)
+            viewer, chain_id, hmm_evalue, overlap_percentage, plddt, packing_density = vis_domain(df, index)
             print(f"Visualizing protein with chain ID: {chain_id}")
             print(f"HMM E-value: {hmm_evalue}")
             print(f"Overlap Percentage: {overlap_percentage}")
+            print(f"pLDDT: {plddt}")
+            print(f"Packing Density: {packing_density}")
             print(f"Showing protein {index + 1} of {len(df)}")
             viewer.show()
         
@@ -209,11 +253,20 @@ def visualize_domains_and_plot(df):
     # Layout
     controls = widgets.HBox([prev_button, slider, next_button])
     search_controls = widgets.HBox([search_box, search_button])
-    top_controls = widgets.VBox([sort_dropdown, controls, search_controls])
+    left_controls = widgets.VBox([sort_dropdown, controls, search_controls])
     
-    # Create a horizontal layout for PyMOL widget and Plotly plot
-    layout = widgets.HBox([output, fig])
+    # Create a container for the plot and its controls
+    plot_controls = widgets.VBox([color_toggle, fig])
     
-    display(top_controls, layout)
+    # Create a container for the visualization
+    vis_container = widgets.VBox([output])
     
-    update_visualization(0)  # Display the first visualization
+    # Main layout
+    main_layout = widgets.VBox([
+        left_controls, 
+        widgets.HBox([vis_container, plot_controls])
+    ])
+    
+    display(main_layout)
+    
+    update_visualization(0)
