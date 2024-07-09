@@ -133,6 +133,7 @@ def visualize_domains_and_plot(df):
         marker=dict(
             size=8,
             color=df['match'].map({'match': 'green', 'no match': 'red'}),
+            opacity=0.5, 
             showscale=False
         ),
         text=df['chain_id'],
