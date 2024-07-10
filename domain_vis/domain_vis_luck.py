@@ -87,8 +87,11 @@ def save_visualization(viewer, output_file):
 def vis_domain(df, index):
     row = df.iloc[index]
     chain_id = row['chain_id']
+    ted_id = row['ted_id']
     hmm_evalue = row['hmm_evalue']
     overlap_percentage = row['overlap_percentage']
+    plddt = row['plddt']
+    packing_density = row['packing_density']
     
     structure = load_alphafold_structure(chain_id)
     
@@ -101,10 +104,8 @@ def vis_domain(df, index):
     
     viewer = visualize_structure(structure, colors)
     
-    return viewer, chain_id, hmm_evalue, overlap_percentage
+    return viewer, chain_id, ted_id, hmm_evalue, overlap_percentage, plddt, packing_density
 
-# domain_vis/domain_vis_luck.py
-# Start of Selection
 def visualize_domains_and_plot(df):
     output = widgets.Output()
     
@@ -123,8 +124,67 @@ def visualize_domains_and_plot(df):
     search_box = Text(placeholder='Enter Uniprot ID or chain_id', description='Search:', continuous_update=False)
     search_button = Button(description='Go')
     
+    # Add toggle button for coloring
+    color_toggle = widgets.ToggleButtons(
+        options=['Match/No Match', 'pLDDT', 'Packing Density'],
+        description='Color by:',
+        disabled=False,
+        button_style='',
+    )
+
     # Create initial scatter plot
     fig = go.FigureWidget()
+
+    def update_scatter_plot(color_by):
+        with fig.batch_update():
+            if color_by == 'Match/No Match':
+                color_values = df['match'].map({'match': 'green', 'no match': 'red'})
+                colorscale = None
+                colorbar_title = None
+                showscale = False
+                
+                # Update legend for Match/No Match
+                fig.data[0].marker.color = color_values
+                fig.data[0].marker.showscale = False
+                fig.data[0].name = 'All Proteins'
+                
+                # Add separate traces for match and no match
+                match_df = df[df['match'] == 'match']
+                no_match_df = df[df['match'] == 'no match']
+                
+                fig.data[2].x = match_df['hmm_evalue']
+                fig.data[2].y = match_df['overlap_percentage']
+                fig.data[2].marker.color = 'green'
+                fig.data[2].name = 'Match'
+                
+                fig.data[3].x = no_match_df['hmm_evalue']
+                fig.data[3].y = no_match_df['overlap_percentage']
+                fig.data[3].marker.color = 'red'
+                fig.data[3].name = 'No Match'
+                
+            elif color_by == 'pLDDT':
+                color_values = df['plddt']
+                colorscale = 'Viridis'
+                colorbar_title = 'pLDDT'
+                showscale = True
+            else:  # Packing Density
+                color_values = df['packing_density']
+                colorscale = 'Plasma'
+                colorbar_title = 'Packing Density'
+                showscale = True
+
+            if color_by != 'Match/No Match':
+                fig.data[0].marker.color = color_values
+                fig.data[0].marker.colorscale = colorscale
+                fig.data[0].marker.colorbar.title = colorbar_title
+                fig.data[0].marker.showscale = showscale
+                fig.data[0].name = 'All Proteins'
+                
+                # Hide match/no match traces
+                fig.data[2].x = []
+                fig.data[2].y = []
+                fig.data[3].x = []
+                fig.data[3].y = []
 
     fig.add_trace(go.Scatter(
         x=df['hmm_evalue'],
@@ -133,12 +193,13 @@ def visualize_domains_and_plot(df):
         marker=dict(
             size=8,
             color=df['match'].map({'match': 'green', 'no match': 'red'}),
-            opacity=0.5, 
+            opacity=0.5,
             showscale=False
         ),
         text=df['chain_id'],
-        name='SF Match'
+        name='All Proteins'
     ))
+    
     fig.add_trace(go.Scatter(
         x=[],
         y=[],
@@ -146,6 +207,23 @@ def visualize_domains_and_plot(df):
         marker=dict(color='black', size=12, symbol='star'),
         name='Selected Protein'
     ))
+    
+    fig.add_trace(go.Scatter(
+        x=[],
+        y=[],
+        mode='markers',
+        marker=dict(color='green', size=8, opacity=0.5),
+        name='Match'
+    ))
+    
+    fig.add_trace(go.Scatter(
+        x=[],
+        y=[],
+        mode='markers',
+        marker=dict(color='red', size=8, opacity=0.5),
+        name='No Match'
+    ))
+
     fig.update_layout(
         title='HMM E-value vs Overlap Percentage',
         xaxis_title='HMM E-value',
@@ -164,25 +242,24 @@ def visualize_domains_and_plot(df):
         width=600,
         height=600
     )
-    fig.add_trace(go.Scatter(
-        x=[None], y=[None], mode='markers',
-        marker=dict(color='red', size=10),
-        name='No SF match'
-    ))
-    
 
+    def on_color_toggle(change):
+        update_scatter_plot(change['new'])
+
+    color_toggle.observe(on_color_toggle, names='value')
 
     def update_visualization(index):
         with output:
             clear_output(wait=True)
-            viewer, chain_id, hmm_evalue, overlap_percentage = vis_domain(df, index)
-            print(f"Visualizing protein with chain ID: {chain_id}")
+            viewer, chain_id, ted_id, hmm_evalue, overlap_percentage, plddt, packing_density = vis_domain(df, index)
+            print(f"Visualizing protein with TED ID: {ted_id}")
             print(f"HMM E-value: {hmm_evalue}")
             print(f"Overlap Percentage: {overlap_percentage}")
+            print(f"pLDDT: {plddt}")
+            print(f"Packing Density: {packing_density}")
             print(f"Showing protein {index + 1} of {len(df)}")
             print(f"HMM SF: {df.iloc[index]['HMM-superfamily']}")
             print(f"TED SF: {df.iloc[index]['TED-superfamily']}")
-
             viewer.show()
         
         # Update scatter plot
@@ -190,7 +267,7 @@ def visualize_domains_and_plot(df):
         with fig.batch_update():
             fig.data[1].x = [selected_point['hmm_evalue']]
             fig.data[1].y = [selected_point['overlap_percentage']]
-    
+
     def on_value_change(change):
         update_visualization(change['new'])
     
@@ -239,7 +316,7 @@ def visualize_domains_and_plot(df):
     left_controls = widgets.VBox([sort_dropdown, controls, search_controls])
     
     # Create a container for the plot and its controls
-    plot_controls = widgets.VBox([fig])
+    plot_controls = widgets.VBox([color_toggle, fig])
     
     # Create a container for the visualization
     vis_container = widgets.VBox([output])
@@ -253,3 +330,6 @@ def visualize_domains_and_plot(df):
     display(main_layout)
     
     update_visualization(0)
+    
+    # Update initial plot
+    update_scatter_plot('Match/No Match')
