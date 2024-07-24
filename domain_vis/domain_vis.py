@@ -8,7 +8,7 @@ import numpy as np
 import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML
 import plotly.graph_objects as go
-from ipywidgets import Text, Button
+from ipywidgets import Text, Button, ToggleButtons
 import plotly.express as px
 
 def load_alphafold_structure(chain_id):
@@ -131,11 +131,32 @@ def visualize_domains_and_plot(df):
         button_style='',
     )
 
+    # Add toggle button for graph type
+    graph_toggle = ToggleButtons(
+        options=['HMM E-value vs Overlap', 'Overlap vs pLDDT'],
+        description='Graph:',
+        disabled=False,
+        button_style='',
+    )
+
     # Create initial scatter plot
     fig = go.FigureWidget()
 
-    def update_scatter_plot(color_by):
+    def update_scatter_plot(color_by, graph_type, selected_index=None):
         with fig.batch_update():
+            if graph_type == 'HMM E-value vs Overlap':
+                x_data = df['hmm_evalue']
+                y_data = df['overlap_percentage']
+                x_title = 'HMM E-value'
+                y_title = 'Overlap Percentage'
+                x_type = 'log'
+            else:  # 'Overlap vs pLDDT'
+                x_data = df['overlap_percentage']
+                y_data = df['plddt']
+                x_title = 'Overlap Percentage'
+                y_title = 'pLDDT'
+                x_type = 'linear'
+
             if color_by == 'pLDDT':
                 colorscale = px.colors.sequential.Viridis
                 color_values = df['plddt']
@@ -145,10 +166,25 @@ def visualize_domains_and_plot(df):
                 color_values = df['packing_density']
                 colorbar_title = 'Packing Density'
 
+            fig.data[0].x = x_data
+            fig.data[0].y = y_data
             fig.data[0].marker.color = color_values
             fig.data[0].marker.colorscale = colorscale
             fig.data[0].marker.colorbar.title = colorbar_title
 
+            fig.update_layout(
+                title=f'{x_title} vs {y_title}',
+                xaxis_title=x_title,
+                yaxis_title=y_title,
+                xaxis_type=x_type
+            )
+
+            if selected_index is not None:
+                selected_point = df.iloc[selected_index]
+                fig.data[1].x = [x_data.iloc[selected_index]]
+                fig.data[1].y = [y_data.iloc[selected_index]]
+
+    # Initial plot setup
     fig.add_trace(go.Scatter(
         x=df['hmm_evalue'],
         y=df['overlap_percentage'],
@@ -186,9 +222,13 @@ def visualize_domains_and_plot(df):
     )
 
     def on_color_toggle(change):
-        update_scatter_plot(change['new'])
+        update_scatter_plot(change['new'], graph_toggle.value, slider.value)
+
+    def on_graph_toggle(change):
+        update_scatter_plot(color_toggle.value, change['new'], slider.value)
 
     color_toggle.observe(on_color_toggle, names='value')
+    graph_toggle.observe(on_graph_toggle, names='value')
 
     def update_visualization(index):
         with output:
@@ -203,11 +243,8 @@ def visualize_domains_and_plot(df):
             viewer.show()
         
         # Update scatter plot
-        selected_point = df.iloc[index]
-        with fig.batch_update():
-            fig.data[1].x = [selected_point['hmm_evalue']]
-            fig.data[1].y = [selected_point['overlap_percentage']]
-    
+        update_scatter_plot(color_toggle.value, graph_toggle.value, index)
+
     def on_value_change(change):
         update_visualization(change['new'])
     
@@ -256,7 +293,7 @@ def visualize_domains_and_plot(df):
     left_controls = widgets.VBox([sort_dropdown, controls, search_controls])
     
     # Create a container for the plot and its controls
-    plot_controls = widgets.VBox([color_toggle, fig])
+    plot_controls = widgets.VBox([color_toggle, graph_toggle, fig])
     
     # Create a container for the visualization
     vis_container = widgets.VBox([output])
