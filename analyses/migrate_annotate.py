@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-import numpy as np
 
 # We're going to add annotation columns to this results file ...
 domain_path = "results/domain_comparison_results_human.processed.tsv"
@@ -24,16 +21,13 @@ def run():
     domain_df = pd.read_csv(domain_path, sep="\t")
     domain_df["ted_id"] = domain_df["foldseek_domain_id"]
     domain_df.set_index("ted_id", inplace=True)
-    domain_df
 
     # get plddt / packing
     anno_df = pd.read_csv(anno_path, names=anno_colnames, sep="\t")
     anno_df.set_index("ted_id", inplace=True)
-    anno_df
 
     # add plddt / packing
     output_df = domain_df.join(anno_df[["plddt", "packing_density"]], how="inner")
-    output_df
 
     output_df.to_csv(results_path, sep="\t", index=False)
 

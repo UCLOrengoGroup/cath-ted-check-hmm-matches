@@ -1,42 +1,60 @@
-# Check TED/HMM matches
+# CATH/TED domain visualization (lean)
 
-Check domain boundaries between HMM matches and TED consensus predictions.
+Minimal tool to visualize HMM vs TED domain boundaries on AlphaFold structures. Analyses live under `analyses/`.
 
-The incoming data is a subset of all HMM/TED domains corresponding to UniProt accessions from human.
+## Setup
 
-Currently the processing is done in a Jupyter notebook which:
-* filters the incoming data based on minimum domain length 
-* creates bins according to overlap and evalue
-* randomly selects 10 entries per bin  
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
 
-### Visualizing the domain boundaries
+Optional cache dir for AlphaFold PDB files (defaults to ~/.cache/cath-vis):
 
-   ```
-   python -m venv myenv
-   source myenv/bin/activate
-   pip install -r requirements.txt
-   ```
+```bash
+export CATH_VIS_CACHE_DIR=/path/to/cache
+```
 
-For domain visualization and analysis, please refer to the Jupyter notebook: `domain_visualization.ipynb` 
+## Usage in notebooks
 
-The notebook uses a custom function `visualize_domains_and_plot(df)` which provides an interactive visualization of domain boundaries and related metrics. This function does the following:
+```python
+import pandas as pd
+from domain_vis import visualize_domains_and_plot
 
-1. 3D Protein Structure Visualization:
-   - Displays the 3D structure of a selected protein using PyMOL.
-   - Colors different regions of the protein to indicate:
-     - HMM-only domains (blue)
-     - TED-only domains (red)
-     - Overlapping HMM and TED domains (purple)
-     - Regions without domain predictions (grey)
+df = pd.read_csv("results/domain_comparison_results_human.processed.annotated.tsv", sep="\t")
+visualize_domains_and_plot(df)
+```
 
-2. Interactive Scatter Plot:
-   - Creates a scatter plot of HMM E-value vs. Overlap Percentage for all proteins in the dataset.
-   - The x-axis (HMM E-value) uses a logarithmic scale.
-   - Each point represents a protein, with the currently selected protein highlighted in red.
+- Color toggle: pLDDT or packing density; if a `match` column exists, a Match/No Match mode is available.
+- Search accepts UniProt accessions or full AlphaFold IDs; accessions normalize to `AF-<ACC>-F1-model_v4`.
 
-3. User Controls:
-   - A slider and navigation buttons to move through the dataset.
-   - A dropdown menu to sort the data by Index, HMM E-value, or Overlap Percentage.
+## Modules
+
+- `domain_vis/core.py`: cache-aware AlphaFold fetch, boundary parsing/merging, viewer builder
+- `domain_vis/visualize.py`: unified interactive viewer (exported via `domain_vis/__init__.py`)
+
+## Analyses (optional)
+
+Scripts are kept separate in `analyses/` to keep the viewer lean:
+
+```bash
+python analyses/plot_density.py --input data/domain_comparison_results_human.tsv --output density_human.png
+python analyses/scatterplot.py --input ted-evalue.txt --outdir results/plots --ymax 80
+python analyses/migrate_upgrade_v2.py
+python analyses/migrate_annotate.py
+```
+
+## Data inputs
+
+- `data/domain_comparison_results_human.tsv`
+- `results/domain_comparison_results_human.processed.tsv`
+- `results/domain_comparison_results_human.processed.annotated.tsv`
+
+## Notes
+
+- AlphaFold PDBs are cached; delete cache files to refresh.
+- Boundary strings like `5-42,60-120_200-240` are parsed and merged.
 
 
 
